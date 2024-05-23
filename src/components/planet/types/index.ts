@@ -1,4 +1,6 @@
 export interface Planet {
+  id: string;
+
   position: {
     x: number;
     y: number;
@@ -6,4 +8,8 @@ export interface Planet {
   radius: number;
 
   color: string;
+}
+
+export interface OwnedPlanet extends Planet {
+  owner: string;
 }
