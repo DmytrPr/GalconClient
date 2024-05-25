@@ -48,6 +48,7 @@ export default function PlanetController({
         );
 
         const outcome = player0Planes.length - player1Planes.length;
+        const original_owner = planet.owner;
 
         if (outcome > 0) {
           alivePlanes = alivePlanes.concat(player0Planes.slice(0, outcome));
@@ -59,6 +60,11 @@ export default function PlanetController({
               const newPlanets = [...old];
               newPlanets[idx].owner = 'player0';
               newPlanets[idx].color = '#5050FF';
+              if (newPlanets[idx].owner !== original_owner){
+                  const conq_event = new CustomEvent('planetConquered', { detail: planet.id });
+                  window.dispatchEvent(conq_event);
+                }
+              
               return newPlanets;
             }
 
@@ -76,6 +82,10 @@ export default function PlanetController({
               const newPlanets = [...old];
               newPlanets[idx].owner = 'player1';
               newPlanets[idx].color = '#FF5050';
+              if (newPlanets[idx].owner !== original_owner){
+                const conq_event = new CustomEvent('planetConquered', { detail: planet.id });
+                window.dispatchEvent(conq_event);
+              }
               return newPlanets;
             }
 

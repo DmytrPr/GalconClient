@@ -6,11 +6,48 @@ import PlaneController from './components/plane/plane.controller';
 import { OwnedPlanet } from './components/planet/types';
 import randRange from './utils/random/rand-range';
 import PixiContainer from './components/pixi/container';
+import euqlidianDistance from './utils/geo/distance';
 
 export default function App() {
   const [planets, setPlanets] = useState<OwnedPlanet[]>([]);
   const [planes, setPlanes] = useState<OwnedPlane[]>([]);
   const spawnIntervalRef = useRef<NodeJS.Timeout[]>([]);
+  const spawnIntervalPlanetsIds = useRef<string[]>([]);
+
+  const addPlaneSpawn = (planet: OwnedPlanet) => {
+    spawnIntervalPlanetsIds.current.push(planet.id);
+  
+    const maxPlanesOnPlanet = Math.floor(planet.radius * 1.5); 
+  
+    spawnIntervalRef.current.push(
+      setInterval(() => {
+        setPlanes((old) => {
+          const planesOnPlanet = old.filter(
+            (plane) =>
+              euqlidianDistance(plane.position, planet.position) < planet.radius
+          );
+  
+          if (planesOnPlanet.length >= maxPlanesOnPlanet) {
+            return old; 
+          }
+          return [
+            ...old,
+            {
+              id: uuid(),
+              position: {
+                x: planet.position.x + randRange(-planet.radius, planet.radius),
+                y: planet.position.y + randRange(-planet.radius, planet.radius),
+              },
+              color: ['#0000FF', '#FF0000'][planet.owner === 'player0' ? 0 : 1],
+              owner: planet.owner,
+            },
+          ];
+        });
+      }, 250000 / planet.radius)
+    );
+  };
+  
+
   useEffect(() => {
     const newPlanets: OwnedPlanet[] = [];
 
@@ -54,23 +91,7 @@ export default function App() {
         color: ['#0000FF', '#FF0000'][planet.owner === 'player0' ? 0 : 1],
         owner: planet.owner,
       });
-
-      spawnIntervalRef.current.push(
-        setInterval(() => {
-          setPlanes((old) => [
-            ...old,
-            {
-              id: uuid(),
-              position: {
-                x: planet.position.x + randRange(-planet.radius, planet.radius),
-                y: planet.position.y + randRange(-planet.radius, planet.radius),
-              },
-              color: ['#0000FF', '#FF0000'][planet.owner === 'player0' ? 0 : 1],
-              owner: planet.owner,
-            },
-          ]);
-        }, 250000 / planet.radius)
-      );
+      addPlaneSpawn(planet)
     });
 
     setPlanes(newPlanes);
@@ -87,6 +108,21 @@ export default function App() {
       spawnIntervalRef.current = [];
     };
   }, [planets.length]);
+
+  window.addEventListener('planetConquered', (event: CustomEventInit) => {
+    const planetId = event.detail;
+    const spawnIndexToDelete  = spawnIntervalPlanetsIds.current.findIndex((id) => id === planetId);
+    spawnIntervalPlanetsIds.current.splice(spawnIndexToDelete, 1);
+    spawnIntervalRef.current.splice(spawnIndexToDelete, 1);
+    const planet = planets.find((p) => p.id === planetId);
+    if (planet){
+      addPlaneSpawn(planet)
+    }
+    
+    
+
+   
+  });
 
   return (
     <PixiContainer>
