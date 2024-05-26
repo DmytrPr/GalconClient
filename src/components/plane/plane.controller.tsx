@@ -1,54 +1,58 @@
-import { useContext, useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { FederatedPointerEvent } from 'pixi.js';
+import randRange from 'utils/random/rand-range';
+import { OwnedPlanet } from '../planet/types';
+import euqlidianDistance from '../../utils/geo/distance';
 import PixiContext from '../pixi/context/pixi.context';
 import PlaneRenderer from './plane.renderer';
 import { OwnedPlane } from './types';
-import { PLANE_CLICK_RANGE } from './const';
+import PlanePopup from './components/plane-popup';
 
 interface PlaneControlProps {
   planes: OwnedPlane[];
+  planets: OwnedPlanet[];
   setPlanes: React.Dispatch<React.SetStateAction<OwnedPlane[]>>;
 }
 export default function PlaneController({
   planes,
+  planets,
   setPlanes,
 }: PlaneControlProps) {
   const pixiApp = useContext(PixiContext);
-  const currentPlaneIdRef = useRef<string | null>(null);
+  const currentPlanetRef = useRef<OwnedPlanet | null>(null);
   const instructionsRef = useRef<Record<string, { x: number; y: number }>>({});
+
+  const [selectedPlanes, setSelectedPlanes] = useState<OwnedPlane[]>([]);
 
   useEffect(() => {
     if (!pixiApp) return () => {};
 
     const handleStageClick = (e: FederatedPointerEvent) => {
-      if (currentPlaneIdRef.current) {
-        instructionsRef.current[currentPlaneIdRef.current] = { x: e.x, y: e.y };
-        currentPlaneIdRef.current = null;
+      const clickedPlanet = planets.find((planet) => {
+        return (
+          euqlidianDistance(planet.position, { x: e.x, y: e.y }) < planet.radius
+        );
+      });
+
+      if (selectedPlanes.length) {
+        selectedPlanes.forEach((plane) => {
+          instructionsRef.current[plane.id] = {
+            x: e.x,
+            y: e.y,
+          };
+        });
+
+        setSelectedPlanes([]);
+
         return;
       }
 
-      const { plane } = planes.reduce(
-        (acc, pln) => {
-          const dist = Math.sqrt(
-            (pln.position.x - e.x) ** 2 + (pln.position.y - e.y) ** 2
-          );
-          if (dist > PLANE_CLICK_RANGE) {
-            return acc;
-          }
-          if (!acc.plane || acc.bestDist > dist) {
-            acc.plane = pln;
-            acc.bestDist = dist;
-          }
+      if (!clickedPlanet) {
+        currentPlanetRef.current = null;
+        return;
+      }
 
-          return acc;
-        },
-        { plane: null, bestDist: Number.MAX_VALUE } as {
-          plane: OwnedPlane | null;
-          bestDist: number;
-        }
-      );
-
-      currentPlaneIdRef.current = plane?.id ?? null;
+      currentPlanetRef.current = clickedPlanet;
     };
 
     pixiApp.stage.addEventListener('click', handleStageClick);
@@ -84,7 +88,30 @@ export default function PlaneController({
       pixiApp.stage.removeEventListener('click', handleStageClick);
       clearInterval(interval);
     };
-  }, [pixiApp, planes, setPlanes]);
+  }, [pixiApp, planes, planets, selectedPlanes, setPlanes]);
 
-  return <PlaneRenderer planes={planes} />;
+  return (
+    <>
+      <PlaneRenderer planes={planes} />
+      {currentPlanetRef.current && !selectedPlanes.length ? (
+        <PlanePopup
+          position={currentPlanetRef.current.position}
+          planes={planes.filter((plane) => {
+            if (
+              !currentPlanetRef.current ||
+              plane.owner !== currentPlanetRef.current.owner
+            )
+              return false;
+            return (
+              euqlidianDistance(
+                currentPlanetRef.current.position,
+                plane.position
+              ) < currentPlanetRef.current.radius
+            );
+          })}
+          setSelectedPlanes={setSelectedPlanes}
+        />
+      ) : undefined}
+    </>
+  );
 }

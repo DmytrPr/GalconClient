@@ -131,7 +131,11 @@ export default function App() {
         setPlanets={setPlanets}
         setPlanes={setPlanes}
       />
-      <PlaneController planes={planes} setPlanes={setPlanes} />
+      <PlaneController
+        planes={planes}
+        planets={planets}
+        setPlanes={setPlanes}
+      />
     </PixiContainer>
   );
 }
