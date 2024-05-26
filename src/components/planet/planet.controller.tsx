@@ -59,6 +59,7 @@ export default function PlanetController({
               const newPlanets = [...old];
               newPlanets[idx].owner = 'player0';
               newPlanets[idx].color = '#5050FF';
+
               return newPlanets;
             }
 
@@ -76,6 +77,7 @@ export default function PlanetController({
               const newPlanets = [...old];
               newPlanets[idx].owner = 'player1';
               newPlanets[idx].color = '#FF5050';
+
               return newPlanets;
             }
 

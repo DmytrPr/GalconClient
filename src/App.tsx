@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { OwnedPlane } from 'components/plane/types';
 import { v4 as uuid } from 'uuid';
 import PlanetController from './components/planet/planet.controller';
@@ -6,11 +6,47 @@ import PlaneController from './components/plane/plane.controller';
 import { OwnedPlanet } from './components/planet/types';
 import randRange from './utils/random/rand-range';
 import PixiContainer from './components/pixi/container';
+import euqlidianDistance from './utils/geo/distance';
 
 export default function App() {
   const [planets, setPlanets] = useState<OwnedPlanet[]>([]);
   const [planes, setPlanes] = useState<OwnedPlane[]>([]);
   const spawnIntervalRef = useRef<NodeJS.Timeout[]>([]);
+  const spawnIntervalPlanetsIds = useRef<string[]>([]);
+
+  const addPlaneSpawn = useCallback((planet: OwnedPlanet) => {
+    spawnIntervalPlanetsIds.current.push(planet.id);
+
+    const maxPlanesOnPlanet = Math.floor(planet.radius * 1.5);
+
+    spawnIntervalRef.current.push(
+      setInterval(() => {
+        setPlanes((old) => {
+          const planesOnPlanet = old.filter(
+            (plane) =>
+              euqlidianDistance(plane.position, planet.position) < planet.radius
+          );
+
+          if (planesOnPlanet.length >= maxPlanesOnPlanet) {
+            return old;
+          }
+          return [
+            ...old,
+            {
+              id: uuid(),
+              position: {
+                x: planet.position.x + randRange(-planet.radius, planet.radius),
+                y: planet.position.y + randRange(-planet.radius, planet.radius),
+              },
+              color: ['#0000FF', '#FF0000'][planet.owner === 'player0' ? 0 : 1],
+              owner: planet.owner,
+            },
+          ];
+        });
+      }, 250000 / planet.radius)
+    );
+  }, []);
+
   useEffect(() => {
     const newPlanets: OwnedPlanet[] = [];
 
@@ -44,49 +80,48 @@ export default function App() {
 
     setPlanets(newPlanets);
 
+    return () => {
+      setPlanes([]);
+      setPlanets([]);
+    };
+  }, []);
+
+  useEffect(() => {
     const newPlanes: OwnedPlane[] = [];
 
-    newPlanets.forEach((planet) => {
+    planets.forEach((planet) => {
       if (planet.owner === 'neutral') return;
+
       newPlanes.push({
         id: uuid(),
         position: { x: planet.position.x, y: planet.position.y },
         color: ['#0000FF', '#FF0000'][planet.owner === 'player0' ? 0 : 1],
         owner: planet.owner,
       });
-
-      spawnIntervalRef.current.push(
-        setInterval(() => {
-          setPlanes((old) => [
-            ...old,
-            {
-              id: uuid(),
-              position: {
-                x: planet.position.x + randRange(-planet.radius, planet.radius),
-                y: planet.position.y + randRange(-planet.radius, planet.radius),
-              },
-              color: ['#0000FF', '#FF0000'][planet.owner === 'player0' ? 0 : 1],
-              owner: planet.owner,
-            },
-          ]);
-        }, 250000 / planet.radius)
-      );
+      addPlaneSpawn(planet);
     });
 
-    setPlanes(newPlanes);
+    setPlanes((old) => old.concat(newPlanes));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addPlaneSpawn, planets.length]);
+
+  useEffect(() => {
+    planets.forEach((planet) => {
+      if (planet.owner === 'neutral') return;
+
+      addPlaneSpawn(planet);
+    });
 
     const intervalRef = spawnIntervalRef.current;
 
     return () => {
-      setPlanes([]);
-      setPlanets([]);
-
       intervalRef.forEach((planeSpawnInterval) =>
         clearInterval(planeSpawnInterval)
       );
+
       spawnIntervalRef.current = [];
     };
-  }, [planets.length]);
+  }, [addPlaneSpawn, planets]);
 
   return (
     <PixiContainer>
