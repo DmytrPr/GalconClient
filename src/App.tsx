@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { OwnedPlane } from 'components/plane/types';
 import { v4 as uuid } from 'uuid';
 import PlanetController from './components/planet/planet.controller';
@@ -14,11 +14,11 @@ export default function App() {
   const spawnIntervalRef = useRef<NodeJS.Timeout[]>([]);
   const spawnIntervalPlanetsIds = useRef<string[]>([]);
 
-  const addPlaneSpawn = (planet: OwnedPlanet) => {
+  const addPlaneSpawn = useCallback((planet: OwnedPlanet) => {
     spawnIntervalPlanetsIds.current.push(planet.id);
-  
-    const maxPlanesOnPlanet = Math.floor(planet.radius * 1.5); 
-  
+
+    const maxPlanesOnPlanet = Math.floor(planet.radius * 1.5);
+
     spawnIntervalRef.current.push(
       setInterval(() => {
         setPlanes((old) => {
@@ -26,9 +26,9 @@ export default function App() {
             (plane) =>
               euqlidianDistance(plane.position, planet.position) < planet.radius
           );
-  
+
           if (planesOnPlanet.length >= maxPlanesOnPlanet) {
-            return old; 
+            return old;
           }
           return [
             ...old,
@@ -45,8 +45,7 @@ export default function App() {
         });
       }, 250000 / planet.radius)
     );
-  };
-  
+  }, []);
 
   useEffect(() => {
     const newPlanets: OwnedPlanet[] = [];
@@ -81,48 +80,48 @@ export default function App() {
 
     setPlanets(newPlanets);
 
+    return () => {
+      setPlanes([]);
+      setPlanets([]);
+    };
+  }, []);
+
+  useEffect(() => {
     const newPlanes: OwnedPlane[] = [];
 
-    newPlanets.forEach((planet) => {
+    planets.forEach((planet) => {
       if (planet.owner === 'neutral') return;
+
       newPlanes.push({
         id: uuid(),
         position: { x: planet.position.x, y: planet.position.y },
         color: ['#0000FF', '#FF0000'][planet.owner === 'player0' ? 0 : 1],
         owner: planet.owner,
       });
-      addPlaneSpawn(planet)
+      addPlaneSpawn(planet);
     });
 
-    setPlanes(newPlanes);
+    setPlanes((old) => old.concat(newPlanes));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addPlaneSpawn, planets.length]);
+
+  useEffect(() => {
+    planets.forEach((planet) => {
+      if (planet.owner === 'neutral') return;
+
+      addPlaneSpawn(planet);
+    });
 
     const intervalRef = spawnIntervalRef.current;
 
     return () => {
-      setPlanes([]);
-      setPlanets([]);
-
       intervalRef.forEach((planeSpawnInterval) =>
         clearInterval(planeSpawnInterval)
       );
+
       spawnIntervalRef.current = [];
     };
-  }, [planets.length]);
-
-  window.addEventListener('planetConquered', (event: CustomEventInit) => {
-    const planetId = event.detail;
-    const spawnIndexToDelete  = spawnIntervalPlanetsIds.current.findIndex((id) => id === planetId);
-    spawnIntervalPlanetsIds.current.splice(spawnIndexToDelete, 1);
-    spawnIntervalRef.current.splice(spawnIndexToDelete, 1);
-    const planet = planets.find((p) => p.id === planetId);
-    if (planet){
-      addPlaneSpawn(planet)
-    }
-    
-    
-
-   
-  });
+  }, [addPlaneSpawn, planets]);
 
   return (
     <PixiContainer>
