@@ -1,6 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { FederatedPointerEvent } from 'pixi.js';
-import randRange from 'utils/random/rand-range';
 import { OwnedPlanet } from '../planet/types';
 import euqlidianDistance from '../../utils/geo/distance';
 import PixiContext from '../pixi/context/pixi.context';
@@ -33,8 +32,7 @@ export default function PlaneController({
           euqlidianDistance(planet.position, { x: e.x, y: e.y }) < planet.radius
         );
       });
-
-      if (selectedPlanes.length) {
+      if (selectedPlanes.length && clickedPlanet) {
         selectedPlanes.forEach((plane) => {
           instructionsRef.current[plane.id] = {
             x: e.x,
@@ -66,7 +64,7 @@ export default function PlaneController({
             const diffY =
               instructionsRef.current[plane.id].y - plane.position.y;
 
-            if (Math.sqrt(diffX * diffX + diffY * diffY) < 10) {
+            if (Math.sqrt(diffX * diffX + diffY * diffY) < 3) {
               delete instructionsRef.current[plane.id];
             }
 
