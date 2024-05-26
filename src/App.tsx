@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { OwnedPlane } from 'components/plane/types';
 import { v4 as uuid } from 'uuid';
 import PlanetController from './components/planet/planet.controller';
 import PlaneController from './components/plane/plane.controller';
 import { OwnedPlanet } from './components/planet/types';
 import randRange from './utils/random/rand-range';
+import generateRandomPointInCircle from './utils/random/rand-circle-pont';
 import PixiContainer from './components/pixi/container';
 import euqlidianDistance from './utils/geo/distance';
 
@@ -12,11 +15,8 @@ export default function App() {
   const [planets, setPlanets] = useState<OwnedPlanet[]>([]);
   const [planes, setPlanes] = useState<OwnedPlane[]>([]);
   const spawnIntervalRef = useRef<NodeJS.Timeout[]>([]);
-  const spawnIntervalPlanetsIds = useRef<string[]>([]);
 
   const addPlaneSpawn = useCallback((planet: OwnedPlanet) => {
-    spawnIntervalPlanetsIds.current.push(planet.id);
-
     const maxPlanesOnPlanet = Math.floor(planet.radius * 1.5);
 
     spawnIntervalRef.current.push(
@@ -34,16 +34,13 @@ export default function App() {
             ...old,
             {
               id: uuid(),
-              position: {
-                x: planet.position.x + randRange(-planet.radius, planet.radius),
-                y: planet.position.y + randRange(-planet.radius, planet.radius),
-              },
+              position: generateRandomPointInCircle(planet.position, planet.radius),
               color: ['#0000FF', '#FF0000'][planet.owner === 'player0' ? 0 : 1],
               owner: planet.owner,
             },
           ];
         });
-      }, 250000 / planet.radius)
+      }, 200000 / planet.radius)
     );
   }, []);
 
@@ -106,6 +103,12 @@ export default function App() {
   }, [addPlaneSpawn, planets.length]);
 
   useEffect(() => {
+    const isGameWon = (planets.every(p => p.owner == 'player0')) || (planets.every(p => p.owner == 'player1'));
+    if (isGameWon && planets && planets[0]){
+      toast.success(`${planets[0].owner} won!`, {
+        position: "top-center"
+      });
+    }
     planets.forEach((planet) => {
       if (planet.owner === 'neutral') return;
 
@@ -136,6 +139,7 @@ export default function App() {
         planets={planets}
         setPlanes={setPlanes}
       />
+      <ToastContainer autoClose={false} />
     </PixiContainer>
   );
 }
