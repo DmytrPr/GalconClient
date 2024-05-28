@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { FederatedPointerEvent } from 'pixi.js';
 import { OwnedPlanet } from '../planet/types';
+import { User } from '../user/types';
 import euqlidianDistance from '../../utils/geo/distance';
 import generateRandomPointInCircle from '../../utils/random/rand-circle-pont';
 import PixiContext from '../pixi/context/pixi.context';
@@ -12,11 +13,13 @@ import PlanePopup from './components/plane-popup';
 interface PlaneControlProps {
   planes: OwnedPlane[];
   planets: OwnedPlanet[];
+  user: User;
   setPlanes: React.Dispatch<React.SetStateAction<OwnedPlane[]>>;
 }
 export default function PlaneController({
   planes,
   planets,
+  user,
   setPlanes,
 }: PlaneControlProps) {
   const pixiApp = useContext(PixiContext);
@@ -68,9 +71,8 @@ export default function PlaneController({
               instructionsRef.current[plane.id].y - plane.position.y;
             
             const distance = Math.sqrt(diffX * diffX + diffY * diffY);
-
             const speed = 5; 
-
+            
             if (distance < speed) {
               delete instructionsRef.current[plane.id];
             }
@@ -108,6 +110,7 @@ export default function PlaneController({
           planes={planes.filter((plane) => {
             if (
               !currentPlanetRef.current ||
+              (currentPlanetRef.current.owner !== user.id && !user.is_admin) ||
               plane.owner !== currentPlanetRef.current.owner
             )
               return false;
