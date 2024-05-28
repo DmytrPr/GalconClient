@@ -67,15 +67,19 @@ export default function App() {
       if (owner != NEUTRAL_NAME){
         color = [PLAYER_PLANET_COLOR, ENEMY_PLANET_COLOR][owner === new_user.id ? 0 : 1]
       }
+      const widthWindow = window.innerWidth;
+      const heightWindow = window.innerHeight;
+      const minRadius = 5
+      const maxRadius = 40
       const planet: OwnedPlanet = {
         id: uuid(),
         position: {
-          x: randRange(100, 1000),
-          y: randRange(100, 1000),
+          x: randRange(100, widthWindow - 3 * maxRadius),
+          y: randRange(100, heightWindow - 3 * maxRadius),
         },
         color: color,
         owner: owner,
-        radius: randRange(5, 40),
+        radius: randRange(minRadius, maxRadius),
       };
 
       if (
