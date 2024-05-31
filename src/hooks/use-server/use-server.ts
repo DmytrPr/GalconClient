@@ -1,12 +1,9 @@
 /* eslint-disable import/no-extraneous-dependencies */
-import * as dotenv from 'dotenv';
 import { useCallback } from 'react';
 import useWebSocket from 'react-use-websocket';
 import { ClientMessage } from './types';
 
-dotenv.config();
-
-const { SERVER_URL } = process.env;
+const { SERVER_URL } = import.meta.env;
 
 export default function useServer() {
   const { sendMessage, readyState, lastMessage } = useWebSocket(

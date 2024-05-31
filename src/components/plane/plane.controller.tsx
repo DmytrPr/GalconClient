@@ -1,6 +1,9 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { FederatedPointerEvent } from 'pixi.js';
-import useServer from 'hooks/use-server/use-server';
+import { toast } from 'react-toastify';
+import useServer from '../../hooks/use-server/use-server';
+import planetToPlanetDTO from '../../utils/backend/convert-dtos';
+import { ClientMessageType } from '../../hooks/use-server/types';
 import { OwnedPlanet } from '../planet/types';
 import { User } from '../user/types';
 import euqlidianDistance from '../../utils/geo/distance';
@@ -27,6 +30,22 @@ export default function PlaneController({
   const instructionsRef = useRef<Record<string, { x: number; y: number }>>({});
 
   const [selectedPlanes, setSelectedPlanes] = useState<OwnedPlane[]>([]);
+  const { sendMessage, lastMessage, readyState } = useServer();
+
+  const planesOnClickedPlanet = useMemo(() => {
+    return planes.filter((plane) => {
+      if (
+        !currentPlanetRef.current ||
+        (currentPlanetRef.current.owner !== user.id && !user.is_admin) ||
+        plane.owner !== currentPlanetRef.current.owner
+      )
+        return false;
+      return (
+        euqlidianDistance(currentPlanetRef.current.position, plane.position) <
+        currentPlanetRef.current.radius
+      );
+    });
+  }, [planes, user.id, user.is_admin]);
 
   useEffect(() => {
     if (!pixiApp) return () => {};
@@ -48,6 +67,23 @@ export default function PlaneController({
             x: clickedPlanetPoint.x,
             y: clickedPlanetPoint.y,
           };
+        });
+
+        if (!currentPlanetRef.current) return;
+
+        sendMessage({
+          type: ClientMessageType.SEND_PLANES,
+          value: {
+            destinationPlanet: planetToPlanetDTO(
+              clickedPlanet,
+              clickedPlanet.owner === user.id
+            ),
+            startPlanet: planetToPlanetDTO(
+              currentPlanetRef.current,
+              clickedPlanet.owner === user.id
+            ),
+            percentage: selectedPlanes.length / planesOnClickedPlanet.length,
+          },
         });
 
         setSelectedPlanes([]);
@@ -103,7 +139,22 @@ export default function PlaneController({
       pixiApp.stage.removeEventListener('click', handleStageClick);
       clearInterval(interval);
     };
-  }, [pixiApp, planes, planets, selectedPlanes, setPlanes]);
+  }, [
+    pixiApp,
+    planes,
+    planesOnClickedPlanet.length,
+    planets,
+    selectedPlanes,
+    sendMessage,
+    setPlanes,
+  ]);
+
+  useEffect(() => {
+    if (readyState && lastMessage) {
+      const serverResponse = JSON.parse(lastMessage?.data);
+      toast.info(serverResponse.type);
+    }
+  }, [lastMessage, readyState]);
 
   return (
     <>
@@ -111,20 +162,7 @@ export default function PlaneController({
       {currentPlanetRef.current && !selectedPlanes.length ? (
         <PlanePopup
           position={currentPlanetRef.current.position}
-          planes={planes.filter((plane) => {
-            if (
-              !currentPlanetRef.current ||
-              (currentPlanetRef.current.owner !== user.id && !user.is_admin) ||
-              plane.owner !== currentPlanetRef.current.owner
-            )
-              return false;
-            return (
-              euqlidianDistance(
-                currentPlanetRef.current.position,
-                plane.position
-              ) < currentPlanetRef.current.radius
-            );
-          })}
+          planes={planesOnClickedPlanet}
           setSelectedPlanes={setSelectedPlanes}
         />
       ) : undefined}
