@@ -1,4 +1,4 @@
 export interface User {
-    id: string;
-  }
-  
+  id: string;
+  is_admin: boolean;
+}
