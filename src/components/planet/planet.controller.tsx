@@ -1,12 +1,17 @@
 import { OwnedPlane } from 'components/plane/types';
+import { User } from 'components/user/types';
 import { useEffect, useRef } from 'react';
 import euqlidianDistance from '../../utils/geo/distance';
 import PlanetRenderer from './planets.renderer';
 import { OwnedPlanet } from './types';
+import { PLAYER_0_NAME, PLAYER_1_NAME } from '../../const';
+import { ENEMY_PLANET_COLOR, PLAYER_PLANET_COLOR } from '../../const/colors';
+
 
 interface PlanetControllerProps {
   planets: OwnedPlanet[];
   planes: OwnedPlane[];
+  user: User;
 
   setPlanets: React.Dispatch<React.SetStateAction<OwnedPlanet[]>>;
   setPlanes: React.Dispatch<React.SetStateAction<OwnedPlane[]>>;
@@ -15,6 +20,7 @@ interface PlanetControllerProps {
 export default function PlanetController({
   planets,
   planes,
+  user,
   setPlanets,
   setPlanes,
 }: PlanetControllerProps) {
@@ -41,10 +47,10 @@ export default function PlanetController({
         });
 
         const player0Planes = planesOnPlanet.filter(
-          (plane) => plane.owner === 'player0'
+          (plane) => plane.owner === PLAYER_0_NAME
         );
         const player1Planes = planesOnPlanet.filter(
-          (plane) => plane.owner === 'player1'
+          (plane) => plane.owner === PLAYER_1_NAME
         );
 
         const outcome = player0Planes.length - player1Planes.length;
@@ -57,8 +63,8 @@ export default function PlanetController({
 
             if (idx > -1) {
               const newPlanets = [...old];
-              newPlanets[idx].owner = 'player0';
-              newPlanets[idx].color = '#5050FF';
+              newPlanets[idx].owner = PLAYER_0_NAME;
+              newPlanets[idx].color = [PLAYER_PLANET_COLOR, ENEMY_PLANET_COLOR][planet.owner === user.id ? 0 : 1];
 
               return newPlanets;
             }
@@ -75,8 +81,8 @@ export default function PlanetController({
 
             if (idx > -1) {
               const newPlanets = [...old];
-              newPlanets[idx].owner = 'player1';
-              newPlanets[idx].color = '#FF5050';
+              newPlanets[idx].owner = PLAYER_1_NAME;
+              newPlanets[idx].color = [PLAYER_PLANET_COLOR, ENEMY_PLANET_COLOR][planet.owner === user.id ? 0 : 1];
 
               return newPlanets;
             }

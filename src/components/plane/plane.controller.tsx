@@ -1,8 +1,10 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { FederatedPointerEvent } from 'pixi.js';
-import randRange from 'utils/random/rand-range';
+import useServer from 'hooks/use-server/use-server';
 import { OwnedPlanet } from '../planet/types';
+import { User } from '../user/types';
 import euqlidianDistance from '../../utils/geo/distance';
+import generateRandomPointInCircle from '../../utils/random/rand-circle-pont';
 import PixiContext from '../pixi/context/pixi.context';
 import PlaneRenderer from './plane.renderer';
 import { OwnedPlane } from './types';
@@ -11,11 +13,13 @@ import PlanePopup from './components/plane-popup';
 interface PlaneControlProps {
   planes: OwnedPlane[];
   planets: OwnedPlanet[];
+  user: User;
   setPlanes: React.Dispatch<React.SetStateAction<OwnedPlane[]>>;
 }
 export default function PlaneController({
   planes,
   planets,
+  user,
   setPlanes,
 }: PlaneControlProps) {
   const pixiApp = useContext(PixiContext);
@@ -30,15 +34,19 @@ export default function PlaneController({
     const handleStageClick = (e: FederatedPointerEvent) => {
       const clickedPlanet = planets.find((planet) => {
         return (
-          euqlidianDistance(planet.position, { x: e.x, y: e.y }) < planet.radius
+          euqlidianDistance(planet.position, { x: e.global.x, y: e.global.y }) <
+          planet.radius
         );
       });
-
-      if (selectedPlanes.length) {
+      if (selectedPlanes.length && clickedPlanet) {
         selectedPlanes.forEach((plane) => {
+          const clickedPlanetPoint = generateRandomPointInCircle(
+            clickedPlanet.position,
+            Math.floor(clickedPlanet.radius / 2)
+          );
           instructionsRef.current[plane.id] = {
-            x: e.x,
-            y: e.y,
+            x: clickedPlanetPoint.x,
+            y: clickedPlanetPoint.y,
           };
         });
 
@@ -66,15 +74,22 @@ export default function PlaneController({
             const diffY =
               instructionsRef.current[plane.id].y - plane.position.y;
 
-            if (Math.sqrt(diffX * diffX + diffY * diffY) < 10) {
+            const distance = Math.sqrt(diffX * diffX + diffY * diffY);
+            const speed = 5;
+
+            if (distance < speed) {
               delete instructionsRef.current[plane.id];
             }
 
+            const velocity = {
+              x: (diffX / distance) * speed,
+              y: (diffY / distance) * speed,
+            };
             return {
               ...plane,
               position: {
-                x: plane.position.x + diffX / 20,
-                y: plane.position.y + diffY / 20,
+                x: plane.position.x + velocity.x,
+                y: plane.position.y + velocity.y,
               },
             };
           }
@@ -99,6 +114,7 @@ export default function PlaneController({
           planes={planes.filter((plane) => {
             if (
               !currentPlanetRef.current ||
+              (currentPlanetRef.current.owner !== user.id && !user.is_admin) ||
               plane.owner !== currentPlanetRef.current.owner
             )
               return false;
