@@ -12,6 +12,7 @@ import PixiContext from '../pixi/context/pixi.context';
 import PlaneRenderer from './plane.renderer';
 import { OwnedPlane } from './types';
 import PlanePopup from './components/plane-popup';
+import { ServerMessageType } from '../../shared/interfaces/message';
 
 interface PlaneControlProps {
   planes: OwnedPlane[];
@@ -153,7 +154,21 @@ export default function PlaneController({
   useEffect(() => {
     if (readyState && lastMessage) {
       const serverResponse = JSON.parse(lastMessage?.data);
-      toast.info(serverResponse.type);
+      let msg_text = '';
+      if (serverResponse.type === ServerMessageType.PLANES_START_FLIGHT){
+        const startx = Math.round(serverResponse.value.startFlightData.startPlanet.geometry.coordinates.x);
+        const starty = Math.round(serverResponse.value.startFlightData.startPlanet.geometry.coordinates.y);
+        const destx = Math.round(serverResponse.value.startFlightData.destinationPlanet.geometry.coordinates.x);
+        const desty = Math.round(serverResponse.value.startFlightData.destinationPlanet.geometry.coordinates.y);
+        msg_text = ` from planet (${startx}, ${starty}) to planet (${destx}, ${desty})`
+      }
+      else if (serverResponse.type === ServerMessageType.PLANES_REACH_OWN_PLANET){
+        const destx = Math.round(serverResponse.value.destinationPlanet.geometry.coordinates.x);
+        const desty = Math.round(serverResponse.value.destinationPlanet.geometry.coordinates.y);
+        msg_text = `  planet (${destx}, ${desty})`
+      }
+      console.log(serverResponse)
+      toast.info(serverResponse.type + msg_text);
     }
   }, [lastMessage, readyState]);
 
