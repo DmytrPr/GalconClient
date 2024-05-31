@@ -147,6 +147,7 @@ export default function PlaneController({
     selectedPlanes,
     sendMessage,
     setPlanes,
+    user.id,
   ]);
 
   useEffect(() => {
