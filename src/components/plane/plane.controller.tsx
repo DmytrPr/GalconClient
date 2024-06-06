@@ -1,9 +1,9 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { FederatedPointerEvent } from 'pixi.js';
 import { toast } from 'react-toastify';
-import useServer from '../../hooks/use-server/use-server';
+import { ReadyState } from 'react-use-websocket';
 import planetToPlanetDTO from '../../utils/backend/convert-dtos';
-import { ClientMessageType } from '../../hooks/use-server/types';
+import { ClientMessage, ClientMessageType } from '../../hooks/use-server/types';
 import { OwnedPlanet } from '../planet/types';
 import { User } from '../user/types';
 import euqlidianDistance from '../../utils/geo/distance';
@@ -18,46 +18,55 @@ interface PlaneControlProps {
   planes: OwnedPlane[];
   planets: OwnedPlanet[];
   user: User;
-  setPlanes: React.Dispatch<React.SetStateAction<OwnedPlane[]>>;
+  sendMessage: (msg: ClientMessage) => void;
+  readyState: ReadyState;
+  lastMessage: MessageEvent<any> | null;
 }
 export default function PlaneController({
   planes,
   planets,
   user,
-  setPlanes,
+  sendMessage,
+  lastMessage,
+  readyState,
 }: PlaneControlProps) {
   const pixiApp = useContext(PixiContext);
-  const currentPlanetRef = useRef<OwnedPlanet | null>(null);
+  const [currentPlanet, setCurrentPlanet] = useState<OwnedPlanet | null>(null);
   const instructionsRef = useRef<Record<string, { x: number; y: number }>>({});
 
   const [selectedPlanes, setSelectedPlanes] = useState<OwnedPlane[]>([]);
-  const { sendMessage, lastMessage, readyState } = useServer();
 
   const planesOnClickedPlanet = useMemo(() => {
     return planes.filter((plane) => {
       if (
-        !currentPlanetRef.current ||
-        (currentPlanetRef.current.owner !== user.id && !user.is_admin) ||
-        plane.owner !== currentPlanetRef.current.owner
+        !currentPlanet ||
+        currentPlanet?.owner !== user.id ||
+        plane.owner !== currentPlanet.owner
       )
         return false;
       return (
-        euqlidianDistance(currentPlanetRef.current.position, plane.position) <
-        currentPlanetRef.current.radius
+        euqlidianDistance(currentPlanet.position, plane.position) <
+        currentPlanet.radius
       );
     });
-  }, [planes, user.id, user.is_admin]);
+  }, [planes, currentPlanet, user.id]);
 
   useEffect(() => {
     if (!pixiApp) return () => {};
 
     const handleStageClick = (e: FederatedPointerEvent) => {
+      console.log('CLICKED');
       const clickedPlanet = planets.find((planet) => {
         return (
           euqlidianDistance(planet.position, { x: e.global.x, y: e.global.y }) <
           planet.radius
         );
       });
+      console.log(
+        'CLICKED',
+        clickedPlanet,
+        selectedPlanes.length && clickedPlanet
+      );
       if (selectedPlanes.length && clickedPlanet) {
         selectedPlanes.forEach((plane) => {
           const clickedPlanetPoint = generateRandomPointInCircle(
@@ -70,7 +79,7 @@ export default function PlaneController({
           };
         });
 
-        if (!currentPlanetRef.current) return;
+        if (!currentPlanet) return;
 
         sendMessage({
           type: ClientMessageType.SEND_PLANES,
@@ -80,7 +89,7 @@ export default function PlaneController({
               clickedPlanet.owner === user.id
             ),
             startPlanet: planetToPlanetDTO(
-              currentPlanetRef.current,
+              currentPlanet,
               clickedPlanet.owner === user.id
             ),
             percentage: selectedPlanes.length / planesOnClickedPlanet.length,
@@ -93,61 +102,26 @@ export default function PlaneController({
       }
 
       if (!clickedPlanet) {
-        currentPlanetRef.current = null;
+        setCurrentPlanet(null);
         return;
       }
 
-      currentPlanetRef.current = clickedPlanet;
+      setCurrentPlanet(clickedPlanet);
     };
 
     pixiApp.stage.addEventListener('click', handleStageClick);
 
-    const interval = setInterval(() => {
-      setPlanes((old) => {
-        return old.map((plane) => {
-          if (instructionsRef.current[plane.id]) {
-            const diffX =
-              instructionsRef.current[plane.id].x - plane.position.x;
-            const diffY =
-              instructionsRef.current[plane.id].y - plane.position.y;
-
-            const distance = Math.sqrt(diffX * diffX + diffY * diffY);
-            const speed = 5;
-
-            if (distance < speed) {
-              delete instructionsRef.current[plane.id];
-            }
-
-            const velocity = {
-              x: (diffX / distance) * speed,
-              y: (diffY / distance) * speed,
-            };
-            return {
-              ...plane,
-              position: {
-                x: plane.position.x + velocity.x,
-                y: plane.position.y + velocity.y,
-              },
-            };
-          }
-
-          return plane;
-        });
-      });
-    }, 50);
-
     return () => {
       pixiApp.stage.removeEventListener('click', handleStageClick);
-      clearInterval(interval);
     };
   }, [
+    currentPlanet,
     pixiApp,
     planes,
     planesOnClickedPlanet.length,
     planets,
     selectedPlanes,
     sendMessage,
-    setPlanes,
     user.id,
   ]);
 
@@ -155,19 +129,36 @@ export default function PlaneController({
     if (readyState && lastMessage) {
       const serverResponse = JSON.parse(lastMessage?.data);
       let msg_text = '';
-      if (serverResponse.type === ServerMessageType.PLANES_START_FLIGHT){
-        const startx = Math.round(serverResponse.value.startFlightData.startPlanet.geometry.coordinates.x);
-        const starty = Math.round(serverResponse.value.startFlightData.startPlanet.geometry.coordinates.y);
-        const destx = Math.round(serverResponse.value.startFlightData.destinationPlanet.geometry.coordinates.x);
-        const desty = Math.round(serverResponse.value.startFlightData.destinationPlanet.geometry.coordinates.y);
-        msg_text = ` from planet (${startx}, ${starty}) to planet (${destx}, ${desty})`
+      if (serverResponse.type === ServerMessageType.PLANES_START_FLIGHT) {
+        const startx = Math.round(
+          serverResponse.value.startFlightData.startPlanet.geometry.coordinates
+            .x
+        );
+        const starty = Math.round(
+          serverResponse.value.startFlightData.startPlanet.geometry.coordinates
+            .y
+        );
+        const destx = Math.round(
+          serverResponse.value.startFlightData.destinationPlanet.geometry
+            .coordinates.x
+        );
+        const desty = Math.round(
+          serverResponse.value.startFlightData.destinationPlanet.geometry
+            .coordinates.y
+        );
+        msg_text = ` from planet (${startx}, ${starty}) to planet (${destx}, ${desty})`;
+      } else if (
+        serverResponse.type === ServerMessageType.PLANES_REACH_OWN_PLANET
+      ) {
+        const destx = Math.round(
+          serverResponse.value.destinationPlanet.geometry.coordinates.x
+        );
+        const desty = Math.round(
+          serverResponse.value.destinationPlanet.geometry.coordinates.y
+        );
+        msg_text = `  planet (${destx}, ${desty})`;
       }
-      else if (serverResponse.type === ServerMessageType.PLANES_REACH_OWN_PLANET){
-        const destx = Math.round(serverResponse.value.destinationPlanet.geometry.coordinates.x);
-        const desty = Math.round(serverResponse.value.destinationPlanet.geometry.coordinates.y);
-        msg_text = `  planet (${destx}, ${desty})`
-      }
-      console.log(serverResponse)
+
       toast.info(serverResponse.type + msg_text);
     }
   }, [lastMessage, readyState]);
@@ -175,9 +166,9 @@ export default function PlaneController({
   return (
     <>
       <PlaneRenderer planes={planes} />
-      {currentPlanetRef.current && !selectedPlanes.length ? (
+      {currentPlanet && !selectedPlanes.length ? (
         <PlanePopup
-          position={currentPlanetRef.current.position}
+          position={currentPlanet.position}
           planes={planesOnClickedPlanet}
           setSelectedPlanes={setSelectedPlanes}
         />
