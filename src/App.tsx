@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { OwnedPlane } from 'components/plane/types';
 import { v4 as uuid } from 'uuid';
+import { ReadyState } from 'react-use-websocket';
+import { OwnedPlane } from './components/plane/types';
+import useServer from './hooks/use-server/use-server';
 import PlanetController from './components/planet/planet.controller';
 import PlaneController from './components/plane/plane.controller';
 import { OwnedPlanet } from './components/planet/types';
@@ -12,169 +14,119 @@ import randString from './utils/random/rand-string';
 import generateRandomPointInCircle from './utils/random/rand-circle-pont';
 import PixiContainer from './components/pixi/container';
 import euqlidianDistance from './utils/geo/distance';
-import { NEUTRAL_NAME, PLAYER_0_NAME, PLAYER_1_NAME } from './const';
-import { ENEMY_PLANET_COLOR, ENEMY_PLANE_COLOR, NEUTRAL_PLANET_COLOR, PLAYER_PLANET_COLOR, PLAYER_PLANE_COLOR } from './const/colors';
+import {
+  NEUTRAL_NAME,
+  PLAYER_0_NAME,
+  PLAYER_1_NAME,
+  SCALE_MULTIPLIER,
+} from './const';
+import {
+  ENEMY_PLANET_COLOR,
+  ENEMY_PLANE_COLOR,
+  NEUTRAL_PLANET_COLOR,
+  PLAYER_PLANET_COLOR,
+  PLAYER_PLANE_COLOR,
+} from './const/colors';
 
 export default function App() {
   const [planets, setPlanets] = useState<OwnedPlanet[]>([]);
   const [planes, setPlanes] = useState<OwnedPlane[]>([]);
-  const [user, setUser] = useState<User>({id:'', is_admin :false});
+  const [user, setUser] = useState<User>({ id: '' });
   const [isGameEnded, setIsGameEnded] = useState<boolean>(false);
   const spawnIntervalRef = useRef<NodeJS.Timeout[]>([]);
 
-  function getUser(): User {
-    const id = randString([PLAYER_0_NAME, PLAYER_1_NAME]);
-    return { id:id, is_admin: false };
-  };  
-  
-  const addPlaneSpawn = useCallback((planet: OwnedPlanet) => {
-    const maxPlanesOnPlanet = Math.floor(planet.radius * 1.5);
+  const { sendMessage, lastMessage, readyState } = useServer();
 
-    spawnIntervalRef.current.push(
-      setInterval(() => {
-        setPlanes((old) => {
-          const planesOnPlanet = old.filter(
-            (plane) =>
-              euqlidianDistance(plane.position, planet.position) < planet.radius
-          );
+  useEffect(() => {
+    if (!lastMessage?.data || readyState !== ReadyState.OPEN) return;
 
-          if (planesOnPlanet.length >= maxPlanesOnPlanet || !user.id) {
-            return old;
-          }
-          return [
-            ...old,
-            {
-              id: uuid(),
-              position: generateRandomPointInCircle(planet.position, planet.radius),
-              color: [PLAYER_PLANE_COLOR, ENEMY_PLANE_COLOR][planet.owner === user.id ? 0 : 1],
+    const parsedData = JSON.parse(lastMessage.data);
+    console.log(parsedData);
+    switch (parsedData.type) {
+      case 'PLAYER_JOINED':
+        setUser({
+          id: parsedData.value.player.id,
+        });
+        break;
+      case 'GAME_START_COUNTDOWN':
+      case 'REGULAR_GENERATED_PLANES_UPDATE':
+        setPlanets(
+          parsedData.value.gameMap.planets.map((planet: any) => {
+            const ownedColor = planet.owner === 1 ? '#0000FF' : '#FF0000';
+            return {
+              id: planet.id,
+              position: {
+                x: planet.geometry.coordinates.x * SCALE_MULTIPLIER,
+                y: planet.geometry.coordinates.y * SCALE_MULTIPLIER,
+              },
+              radius: planet.geometry.radius * SCALE_MULTIPLIER,
               owner: planet.owner,
-            },
-          ];
-        });
-      }, 200000 / planet.radius)
-    );
-  }, [user]);
+              color: planet.owner !== 'neutral' ? ownedColor : '#505050',
+            };
+          })
+        );
 
-  useEffect(() => {
-    const new_user = getUser();
-    setUser(new_user);
-    const newPlanets: OwnedPlanet[] = [];
+        console.log(
+          parsedData.value.gameMap.planets.map((planet: any) => {
+            const ownedColor = planet.owner === 1 ? '#0000FF' : '#FF0000';
+            return {
+              id: planet.id,
+              position: {
+                x: planet.geometry.coordinates.x * SCALE_MULTIPLIER,
+                y: planet.geometry.coordinates.y * SCALE_MULTIPLIER,
+              },
+              radius: planet.geometry.radius * SCALE_MULTIPLIER,
+              owner: planet.owner,
+              color: planet.owner !== 'neutral' ? ownedColor : '#505050',
+            };
+          })
+        );
 
-    for (let i = 0; i < 25; i++) {
-      const type = Math.floor(randRange(0, 3));
-      const owner = [PLAYER_0_NAME, PLAYER_1_NAME, NEUTRAL_NAME][type]
-      let color = NEUTRAL_PLANET_COLOR
-      if (owner != NEUTRAL_NAME){
-        color = [PLAYER_PLANET_COLOR, ENEMY_PLANET_COLOR][owner === new_user.id ? 0 : 1]
-      }
-      const widthWindow = window.innerWidth;
-      const heightWindow = window.innerHeight;
-      const minRadius = 5
-      const maxRadius = 40
-      const planet: OwnedPlanet = {
-        id: uuid(),
-        position: {
-          x: randRange(100, widthWindow - 3 * maxRadius),
-          y: randRange(100, heightWindow - 3 * maxRadius),
-        },
-        color: color,
-        owner: owner,
-        radius: randRange(minRadius, maxRadius),
-      };
+        setPlanes(
+          parsedData.value.gameMap.planets
+            .map((planet: any) => {
+              if (!planet.numberOfPlanes || planet.owner === 'neutral')
+                return [];
+              return [...Array(planet.numberOfPlanes)].map(() => {
+                const ownedColor = planet.owner === 1 ? '#0000FF' : '#FF0000';
+                const planePosition = generateRandomPointInCircle(
+                  {
+                    x: planet.geometry.coordinates.x * SCALE_MULTIPLIER,
+                    y: planet.geometry.coordinates.y * SCALE_MULTIPLIER,
+                  },
+                  planet.geometry.radius * SCALE_MULTIPLIER
+                );
 
-      if (
-        !newPlanets.find((existingPlanet) => {
-          return (
-            Math.sqrt(
-              (existingPlanet.position.x - planet.position.x) ** 2 +
-                (existingPlanet.position.y - planet.position.y) ** 2
-            ) <
-            existingPlanet.radius + planet.radius
-          );
-        })
-      ) {
-        newPlanets.push(planet);
-      }
+                return {
+                  color: ownedColor,
+                  id: uuid(),
+                  owner: planet.owner,
+                  position: planePosition,
+                } as OwnedPlane;
+              });
+            })
+            .flat()
+        );
+        break;
+      default:
+        console.error('Unknown message type');
     }
+  }, [lastMessage?.data, readyState]);
 
-    setPlanets(newPlanets);
-
-    return () => {
-      setPlanes([]);
-      setPlanets([]);
-    };
-  }, []);
-
-  useEffect(() => {
-    const newPlanes: OwnedPlane[] = [];
-
-    planets.forEach((planet) => {
-      if (planet.owner === NEUTRAL_NAME) return;
-
-      newPlanes.push({
-        id: uuid(),
-        position: { x: planet.position.x, y: planet.position.y },
-        color: [PLAYER_PLANE_COLOR, ENEMY_PLANE_COLOR][planet.owner === user.id ? 0 : 1],
-        owner: planet.owner,
-      });
-      addPlaneSpawn(planet);
-    });
-
-    setPlanes((old) => old.concat(newPlanes));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addPlaneSpawn, planets.length]);
-
-  useEffect(() => {
-    const isGameWon = (planets.every(p => p.owner == PLAYER_0_NAME)) || (planets.every(p => p.owner == PLAYER_1_NAME));
-    if (isGameWon && planets && planets[0] && !isGameEnded){
-      setIsGameEnded(true)
-      if (planets[0].owner === user.id){
-        toast.success('You won!', {
-          position: "top-center"
-        });
-      }
-      else{
-        toast.error('You lost!', {
-          position: "top-center"
-        });
-      }
-      
-    }
-    planets.forEach((planet) => {
-      if (planet.owner === NEUTRAL_NAME) return;
-
-      addPlaneSpawn(planet);
-    });
-
-    const intervalRef = spawnIntervalRef.current;
-
-    return () => {
-      intervalRef.forEach((planeSpawnInterval) =>
-        clearInterval(planeSpawnInterval)
-      );
-
-      spawnIntervalRef.current = [];
-    };
-  }, [addPlaneSpawn, planets]);
-
-    if (!user.id) {
-    return <div>Loading...</div>; 
+  if (!user.id) {
+    return <div>Loading...</div>;
   }
 
   return (
     <PixiContainer>
-      <PlanetController
-        planets={planets}
-        planes={planes}
-        user={user}
-        setPlanets={setPlanets}
-        setPlanes={setPlanes}
-      />
+      <PlanetController planets={planets} />
       <PlaneController
         user={user}
         planes={planes}
         planets={planets}
-        setPlanes={setPlanes}
+        lastMessage={lastMessage}
+        readyState={readyState}
+        sendMessage={sendMessage}
       />
       <ToastContainer autoClose={false} />
     </PixiContainer>
